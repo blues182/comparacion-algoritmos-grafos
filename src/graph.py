@@ -2,6 +2,7 @@
 import math
 import csv
 import os
+import random
 
 
 class Graph:
@@ -46,9 +47,53 @@ class Graph:
         return math.sqrt((x1 - x2) ** 2 + (y1 - y2) ** 2)
 
 
-# ---------- Funciones para cargar datos desde CSV ----------
+# =====================================================================
+#   GENERADOR DE GRAFOS ALEATORIOS (LO QUE NECESITAS)
+# =====================================================================
 
-def load_graph_from_csv(data_dir="data"):
+def generar_grafo_geometrico(num_nodos: int, densidad: float, seed: int = 42) -> Graph:
+    """
+    Genera un grafo no dirigido:
+
+    - num_nodos nodos con posiciones aleatorias en el cuadrado [0,1] x [0,1].
+    - Conecta pares de nodos con probabilidad p para aproximar la densidad.
+      densidad ≈ E / (N*(N-1)/2)  -> usamos p ≈ 2*densidad (acotado en [0,1]).
+    - El peso de cada arista es la distancia euclidiana entre nodos.
+
+    Los ids de los nodos son strings: "0", "1", ..., para que luego
+    sea fácil guardarlos en CSV si quieres.
+    """
+    random.seed(seed)
+    g = Graph()
+
+    # Crear nodos con posiciones aleatorias
+    for i in range(num_nodos):
+        x = random.random()
+        y = random.random()
+        g.add_node(str(i), x, y)
+
+    nodos = list(g.adj.keys())
+    n = len(nodos)
+
+    # Probabilidad de arista aproximando densidad
+    p = min(1.0, max(0.0, 2 * densidad))
+
+    for i in range(n):
+        for j in range(i + 1, n):
+            if random.random() < p:
+                u = nodos[i]
+                v = nodos[j]
+                w = g.distance_euclidiana(u, v)
+                g.add_edge(u, v, w)
+
+    return g
+
+
+# =====================================================================
+#   FUNCIONES OPCIONALES PARA CARGAR CSV (POR SI LAS LLEGAS A USAR)
+# =====================================================================
+
+def load_graph_from_csv(data_dir="data") -> Graph:
     """
     Carga un grafo desde:
       - nodos.csv:  id,x,y
@@ -58,8 +103,13 @@ def load_graph_from_csv(data_dir="data"):
     """
     g = Graph()
 
-    # --- Cargar nodos ---
     nodos_path = os.path.join(data_dir, "nodos.csv")
+    aristas_path = os.path.join(data_dir, "aristas.csv")
+
+    if not os.path.exists(nodos_path) or not os.path.exists(aristas_path):
+        raise FileNotFoundError("No se encontraron nodos.csv / aristas.csv en la carpeta data/.")
+
+    # --- Cargar nodos ---
     with open(nodos_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -69,7 +119,6 @@ def load_graph_from_csv(data_dir="data"):
             g.add_node(node_id, x, y)
 
     # --- Cargar aristas ---
-    aristas_path = os.path.join(data_dir, "aristas.csv")
     with open(aristas_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
         for row in reader:
@@ -78,7 +127,6 @@ def load_graph_from_csv(data_dir="data"):
             w_str = row.get("weight", "").strip()
 
             if w_str == "":
-                # Si no hay peso explícito, usar distancia euclidiana
                 if u not in g.positions or v not in g.positions:
                     raise ValueError("No se pueden calcular pesos: faltan posiciones para nodos.")
                 weight = g.distance_euclidiana(u, v)
@@ -94,9 +142,12 @@ def load_od_pairs(data_dir="data"):
     """
     Carga pares origen–destino desde pares_OD.csv:
       - columnas: source,target
-    Devuelve una lista de tuplas (source, target) como strings.
+    Devuelve lista de tuplas (source, target) como strings.
     """
     pares_path = os.path.join(data_dir, "pares_OD.csv")
+    if not os.path.exists(pares_path):
+        raise FileNotFoundError("No se encontró pares_OD.csv en la carpeta data/.")
+
     pares = []
     with open(pares_path, newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
